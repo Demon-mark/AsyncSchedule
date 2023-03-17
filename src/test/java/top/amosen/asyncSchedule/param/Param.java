@@ -88,4 +88,22 @@ public class Param {
         Async.execute(scheduler);
 
     }
+
+    @Test
+    public void multi() {
+        Scheduler scheduler = new Scheduler();
+        for (int i = 0; i < 7; i++) {
+            String name = "runner" + (i + 1);
+            scheduler.newWorker(name, new Runner()).setParam(name + " param");
+        }
+
+        scheduler.resultTransfer("runner1", "runner2");
+        scheduler.resultTransfer("runner1", "runner3");
+        scheduler.resultTransfer("runner2", "runner3");
+        scheduler.resultTransfer("runner3", "runner4");
+        scheduler.resultTransfer("runner4", "runner5");
+        scheduler.resultTransfer("runner6", "runner7");
+        scheduler.resultTransfer("runner7", "runner5");
+        Async.execute(scheduler);
+    }
 }

@@ -8,6 +8,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.FutureTask;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * 可被调度的节点，单线程访问
@@ -26,7 +27,7 @@ public class AScheduleNode<P, R> {
     // name -> node
     private Set<AScheduleNode> nextNodes = new HashSet<>();
 
-    private volatile Integer quoted = 0;
+    private AtomicInteger quoted = new AtomicInteger(0);
 
     private Map<String, AWorkerResult> params = new ConcurrentHashMap<>();
 
@@ -54,27 +55,27 @@ public class AScheduleNode<P, R> {
     }
 
     public void setQuoted(Integer quoted) {
-        this.quoted = quoted;
+        this.quoted.compareAndSet(this.quoted.get(), quoted);
         if (quoted >= 1) {
             scheduler.addWaiting(this);
         }
     }
 
-    public Integer getQuoted() {
+    public AtomicInteger getQuoted() {
         return quoted;
     }
 
-    public void setNextNode(String name, AScheduleNode node) {
+    public void setNextNode(AScheduleNode node) {
         this.nextNodes.add(node);
-        Integer nextQuoted = node.getQuoted();
-        nextQuoted++;
-        node.setQuoted(nextQuoted);
+        AtomicInteger nextQuoted = node.getQuoted();
+        int incr = nextQuoted.incrementAndGet();
+        node.setQuoted(incr);
     }
 
     public void addParam(String name, AWorkerResult result) {
         this.params.put(name, result);
-        --this.quoted;
-        if (quoted == 0) {
+        int decr = this.quoted.decrementAndGet();
+        if (decr == 0) {
             scheduler.removeWaiting(this);
         }
     }
@@ -85,7 +86,7 @@ public class AScheduleNode<P, R> {
 
     public void call(ExecutorService executorService) throws ExecutionException, InterruptedException {
         // 自旋锁等待，实际上，这一段不应该被多次循环，否则应当重新设计调度
-        while (quoted != 0) {
+        while (quoted.get() != 0) {
         }
         FutureTask<AWorkerResult> task = wrapper.execute(params);
 //        executorService.execute(task);

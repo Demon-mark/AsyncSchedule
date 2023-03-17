@@ -22,10 +22,12 @@ public class Scheduler implements Iterator {
 
     private final Set<AScheduleNode> executed = Collections.synchronizedSet(new HashSet<>());
 
+    private final Set<AScheduleNode> executing = Collections.synchronizedSet(new HashSet<>());
+
     private final Map<String, AScheduleNode> registered = new HashMap<>();
 
     public boolean hasNext() {
-        if (executable.isEmpty() && !waiting.isEmpty()) {
+        if (executable.isEmpty() && !waiting.isEmpty() && executing.isEmpty()) {
             StringBuilder stringBuilder = new StringBuilder("[ ");
             waiting.forEach(node -> stringBuilder.append(node.getName() + ", "));
             stringBuilder.append("]");
@@ -36,7 +38,9 @@ public class Scheduler implements Iterator {
 
     public AScheduleNode next() {
         try {
-            return executable.take();
+            AScheduleNode node = executable.take();
+            executing.add(node);
+            return node;
         } catch (InterruptedException e) {
             throw new RuntimeException(e);
         }
@@ -61,6 +65,7 @@ public class Scheduler implements Iterator {
     }
 
     public void addExecuted(AScheduleNode node) {
+        executing.remove(node);
         executed.add(node);
     }
 
@@ -83,7 +88,13 @@ public class Scheduler implements Iterator {
         if (registered.get(from) == null || registered.get(to) == null) {
             throw new RuntimeException("please initial worker before attach");
         }
-        registered.get(from).setNextNode(to, registered.get(to));
+        registered.get(from).setNextNode(registered.get(to));
+    }
+
+    public void resultTransfer(String from, String ... to) {
+        for (String worker : to) {
+            resultTransfer(from, worker);
+        }
     }
 
     /**
