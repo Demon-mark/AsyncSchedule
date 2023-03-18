@@ -1,7 +1,7 @@
 package top.amosen.asyncSchedule.async;
 
 import top.amosen.asyncSchedule.scheduler.Scheduler;
-import top.amosen.asyncSchedule.wrapper.AScheduleNode;
+import top.amosen.asyncSchedule.wrapper.AWorkerWrapper;
 
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
@@ -18,21 +18,23 @@ public class Async {
 
     private static ExecutorService executorService;
 
-    public static void execute(ExecutorService executorService, Scheduler scheduler) {
-        while (scheduler.hasNext()) {
-            AScheduleNode node = scheduler.next();
-            try {
-                node.call(executorService);
-            } catch (ExecutionException e) {
-                throw new RuntimeException(e);
-            } catch (InterruptedException e) {
-                throw new RuntimeException(e);
-            }
+    public static void execute(ExecutorService service, Scheduler scheduler) {
+        if (null != service) {
+            executorService = service;
+        } else {
+            executorService = COMMON_POOL;
         }
-    }
-
-    public static void execute(Scheduler scheduler) {
-        execute(COMMON_POOL, scheduler);
+        // 开辟异步线程来完成调度工作
+        executorService.execute(() -> {
+            while (scheduler.hasNext()) {
+                AWorkerWrapper wrapper = scheduler.next();
+                Runnable run = wrapper.execute();
+                if (run != null) {
+                    executorService.execute(run);
+                }
+            }
+            scheduler.forAll();
+        });
     }
 
 }

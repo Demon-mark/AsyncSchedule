@@ -13,8 +13,18 @@ public class Runner implements AWorker<String, String> {
 
     @Override
     public String run(String param, Map<String, AWorkerResult> results) {
+        try {
+            Thread.sleep(1000);
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+        }
         System.out.println(param);
         results.forEach((s, aWorkerResult) -> System.out.println(param + " " + s + ":" + aWorkerResult.getResult()));
+        try {
+            Thread.sleep(1000);
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+        }
         return param;
     }
 }

@@ -1,18 +1,18 @@
-# asyncSchedule 异步任务编排框架
-借鉴于京东asyncTool框架，简化异步任务编排API
+# asyncSchedule 事件驱动型异步任务编排框架
 
 ## 相关概念
 + AWorker：最小工作单元，提供具体的异步任务
 + AWorkerWrapper：最小执行单元，为异步任务提供回调能力，传递异步任务参数
-+ AWorkerNode：最小调度单元，提供自适应的调度能力
 + Scheduler：与AWorkerNode配合通过三色标记法实现不同任务之间的依赖关系
 + Async：线程池包装，与Scheduler配合完成异步任务及其编排
 
 ## 特点
-+ API设计符合开发人员常规思考方式
 + 灵活的事件回调
-+ 相互依赖的任务之间结果互相传递
-+ 支持并行、一对多、多对一、多对多的任务编排
++ 相互依赖的任务之间数据传递
++ 支持并行、一对多、多对一、多对多及复杂流程编排
++ 支持强弱依赖关系，分别对应allOf、anyOf
++ 支持任务的快速失败
++ 循环数据传递的预检及运行时检查
 
 ## 相关接口
 + AWorker：覆写这个接口的run方法来定义自己的业务逻辑，param参数代表了未来会传递给这个接口的参数，results则代表了可能的其他任务为该任务提供的结果
@@ -20,42 +20,110 @@
 + Scheduler.resultTransfer(String from, String to)：通过这个接口，调度器将知道数据需要从名字为from的worker传递到名字为to的worker，当调用这个接口时，需要保证from，to所代表的worker已经被正确实例化（未来可能提供预配置来使调度器能够调度未来的worker）
 + Async.execute(Scheduler scheduler)：运行你的任务
 
+## 使用建议
++ 框架的核心为Scheduler，通过Scheduler对象，能够快速地进行容器编排及参数传递，Scheduler是全局的调度器，通过它可以来注册你的任务并为其命名，在运行结束后，还可以通过它和你所指定的任务名来获取你的任务执行结果
++ 如何注册一个任务？通过Scheduler对象的newWorker()方法，通过这个方法，你可以在注册一个对象的同时通过链式调用来自定义你的操作，比如，你可以使用callback来指定你自己的回调方法，但是要注意，所有链式调用中的重复调用会只保留最后一次调用的设置，也就是说，如果调用了多次callback()，那么最终的回调的执行只是最后一次callback()时所指定的回调。
++ 如何建立一个数据流向？工具支持单向的数据流通，即只支持数据从一个方法流入另一个方法，而不能反过来，如果不能理解，只需要想一下，工具的数据流通核心是将上一步的返回值汇总并传递到下一个方法。很快就可以在示例代码中看到，通过数据流通，可以很轻易的编排出整个异步任务的全貌。
++ 什么是快速失败？对于强依赖任务，即一个任务的执行依赖于之前全部任务的正常完成，如果有一个或几个之前的任务失败，那么这个任务就不应该被执行，对于弱依赖任务，即一个任务的执行只需要前面的一个或几个任务结束即可，不要求全部任务的正常返回，这时只要有一个之前的任务正常结束，这个任务就应当继续执行，其快速失败只发生在他的强依赖任务失败或其弱依赖任务全部失败
++ 回调能做什么？对于回调定义如下：
+```java
+public interface ACallback<P, R> {
+
+    /**
+     * 这个回调将在任务即将开始时调用，在这里可以有机会对参数进行最后一次检查
+     * @param param 传入的参数
+     */
+    void onBegin(@Nullable P param);
+
+    /**
+     * 当任务有了执行结果时，这个回调会被触发，其触发时机为：当次任务正常执行之后，下个任务onBegin之前
+     * @param result 当次任务的执行结果
+     */
+    void onResult(@Nullable R result);
+
+    /**
+     * 在当次任务出错时将会被调用
+     * @param throwable 错误原因
+     * @param result 执行结果的引用
+     * @return 是否继续执行，返回为true将会使用result引用继续下一次任务，返回为false则会抛出异常信息终止此次任务
+     */
+    boolean onError(@NotNull Throwable throwable, @Nullable R result);
+
+    /**
+     * 当任务完成时调用，无论是否正常完成都会被调用
+     * @param param 执行参数
+     * @param result 执行结果
+     * @param throwable 异常信息
+     */
+    void onComplete(@Nullable P param,
+                    @Nullable R result,
+                    @Nullable Throwable throwable);
+
+    /**
+     * 当任务呗快速失败时调用
+     * @param throwable 被快速失败的原因
+     * @param results 快速失败前的结果
+     */
+    void onFail(Throwable throwable, Map<String, AWorkerResult> results);
+
+}
+```
+使用回调函数将使你有可能介入任务执行的各个阶段，并更改一些状态信息，不用担心，所有的数据都是线程私有的，因此不会有并发安全隐患。
+
+此外，尤其要注意的是，一些操作可能影响任务的行为，例如onError方法，当你返回false时，程序将不会忽略异常信息，并对依赖该任务的其他任务执行快速失败，而当你返回true时，程序会忽略异常信息并继续将result进行传递
+
+总之，工具希望能够通过回调函数来让你知道到底发生了什么，并竭尽可能地为你提供所有需要的信息。
+
+其实，对于Scheduler是如何实现的，实际上就是利用回调函数来完成的。
+
 ## 示例代码
-+ 并行执行
+<b>所有的实例代码都可以在test包下找到</b>
++ ### 并行执行
+通过Scheduler对象创建一系列的worker同时执行！
 ```java
 public class parallel {
-
+    
    @Test
    public void parallel() {
-      Scheduler scheduler = new Scheduler();
-      scheduler.newWorker("runner1", new Runner())
-              .setParam("runner1")
-              .callback(new CallBack("runner1"));
+       
+       Scheduler scheduler = new Scheduler();
 
-      scheduler.newWorker("runner2", new Runner())
-              .setParam("runner2")
-              .callback(new CallBack("runner2"));
-      scheduler.newWorker("runner3", new Runner())
-              .setParam("runner3")
-              .callback(new CallBack("runner3"));
+       for (int i = 0; i < 50; i++) {
+           scheduler.newWorker("runner" + i, new Runner())
+                   .param("runner" + i)
+                   .callback(new DefaultCallbackAdapter<String, String>() {
+                       @Override
+                       public void onResult(String result) {
+                           System.out.println("result" + result);
+                       }
 
-      Async.execute(scheduler);
+                       @Override
+                       public boolean onError(Throwable throwable, String result) {
+                           throwable.printStackTrace();
+                           return true;
+                       }
+                   }).build();
+       }
 
-      Iterator<AScheduleNode> results = scheduler.results();
-      while (results.hasNext()) {
-         try {
-            System.out.println(results.next().result().getResult());
-         } catch (ExecutionException e) {
-            throw new RuntimeException(e);
-         } catch (InterruptedException e) {
-            throw new RuntimeException(e);
-         }
-      }
+       scheduler.run();
+
+       Map<String, AWorkerResult> results = scheduler.results();
+       results.forEach(new BiConsumer<String, AWorkerResult>() {
+           @Override
+           public void accept(String s, AWorkerResult result) {
+               System.out.println(s + ": " + result.getResult());
+           }
+       });
    }
 }
 ```
 
-+ 一对多数据传递
++ ### 一对多数据传递
+通过must，将数据从任意一个地方传递到另外任意一个地方！
+
+以下代码展示了这样的场景：
+
+![alt 一对多数据传递](data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAiUAAAHvCAYAAACL9q+kAAAaRklEQVR4nO3df4hcd90v8O9kdt1N4jRrI9Ks8UJqiU0rBZs0BuyvUGyj1kRqRR4QWp5rhefCY6lSEcSqBUGoFGrAP1Sk/Uf/0WJLIVFcLXgr6G2eeyltebSp5ZJkNzw2denQZtPe6dyckYTddJOd7X5nz+eceb3aIZnMmfd85utZ8+6cMzONI8dmup1OJ402G2lycjLl1G63U6vVGsrM6elp65mR9bSekTOtp/WMnFml9VyTNREA4B1qzH+lJHfrGWaDaJHDzHrmZT3zsp55Wc+8qrSeI/OvVOFlKJkyZcqUKVNmPTMdvgEAQlBKAIAQlBIAIASlBAAIQSkBAEJQSgCAEJQSACAEpQQACEEpAQBCUEoAgBCUEgAgBKUEAAhBKQEAQlBKAIAQlBIAIASlBAAIQSkBAEJQSgCAEJQSACCExpFjM91Op5NGm43UarXKnqc22u229czIeuZlPfOynnlZz7yqtJ4j86/kHnoQCyFTpkyZMmXKrGemwzcAQAhKCQAQglICAISglAAAISglAEAISgkAEIJSAgCEoJQAACEoJQBACEoJABCCUgIAhKCUAAAhKCUAQAhKCQAQglICAISglAAAISglAEAISgkAEIJSAgCE0DhybKbb6XTSaLORWq1W2fPURrvdtp4ZWc+8rGde1jMv65lXldZzZP6V3EMPYiFkypQpU6ZMmfXMdPgGAAhBKQEAQlBKAIAQlBIAIASlBAAIQSkBAEJQSgCAEJQSACAEpQQACEEpAQBCUEoAgBCUEgAgBKUEAAhBKQEAQlBKAIAQlBIAIASlBAAIQSkBAEJQSgCAEBpHjs10O51OGm02soe3Wq3UbreHMnMQqvLcrWf8zEGoynO3nvEzB6Eqz33Y13NBKZmcnMz6AMXAxYMMY+b09LT1zMh6Ws/ImdbTekbOrNJ6OnwDAISglAAAISglAEAISgkAEIJSAgCEoJQAACEoJQBACEoJABCCUgIAhKCUAAAhKCUAQAhKCQAQglICAISglAAAISglAEAISgkAEIJSAgCEMFL2AABL+evhF9PMzPEsWSdPnkxr167NknXGiRMn0saNG7NmDmLOqmQuZz03bLgobfvQ1jQ2NpZ1BsqhlAChvXC6kOzZe3vZYxDYv931r+nee/697DHIYEEpabfb2R9ApkyZMlfiz0//R/ZM6uV/Hfrffe17VdnnhzlzQSlptVpZw4uBZcqUKXMlmePj42evf+62fekDm9+f9TGorgd/8MPer81mc8l9r0r7/DBnOnwDVMbOHVenz35mb9ljEMSZUkJ9ePcNABCCUgIAhKCUAAAhKCUAQAhKCQAQglICAISglAAAISglAEAISgkAEIJSAgCEoJQAACEoJQBACEoJABCCUgIAhKCUAAAhKCUAQAhKCQAQglICAIQwMv9Ku93O/gAyZcqUuRJzc3PZM6mXTqfT175XlX1+mDMXlJJWq5U1vBhYpkyZMleSOT4+njWT+mk2m0vue1Xa54c50+EbACAEpQQACEEpAQBCUEoAgBCUEgAgBKUEAAhBKQEAQlBKAIAQlBJgIP70pz+lN998s+wxamP//v1p+/btZy+33npreumll8oeC7JSSoCB+MpXvpI+/vGPp+985zvpqaeeSqdOnSp7pMp67LHH0vHjx3vreOjQod7llltuSbfffnvvNqiLkaU3AXhnio+Nfvzxx3uXtWvXphtvvLFXVHbu3Nm7Tn+K9dq3b9+CP7vrrrt6ReXRRx9NN9xwQ5qYmChpOshHKQFWxcmTJ9OBAwd6l9HR0XT99df3/mu/+As393do1M2mTZve9mfFdwJdcskl6ejRoyVMBIOhlACrrjjXZGpqqndpNBrp2muv7RWUXbt2pfe85z1ljweURCmBCnvuuefSwYMHU7fbXdb9XnvttbR+/fqss7zxxhvpXe9619nr/Z7kWsz+hz/8oXcpXHHFFelTn/pUuummm3xD8AXMzs6mp59+Om3evNk6URtKCVTYV7/61fT3v/+97DHesaKQFK+UzPf888/3Lg888EC66qqr0uTm/5bWnN7kreX1rlqbm5vrrc+zzz6bvvzlLysl1IZSAhX28ssvlz3CQL366qtp7T9eSb3eopT0FK+Q3H333b1Ccuedd/beHgx1oZRATTz44INve9XhfF555ZV08cUXZ3384kTW+e+o+drXvrbkIZzF5t26dWvvHJPicziKGX8z9WQ6+Lv/mXXWqireCvylL32p9/v77rvvbe/IgapTSqAmir/Im81mX9tOT0+nycnJrI9fvP13/rtoiln6Oa+kKCbbtm1L1113Xdq7d2/vHSXzM/mn4vNI7r///t47cYoPUtuyZUvZI0F2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)
 ```java
 public class Param {
 
@@ -63,23 +131,29 @@ public class Param {
     public void oneToMany() {
         Scheduler scheduler = new Scheduler();
         scheduler.newWorker("runner1", new Runner())
-                .setParam("runner1 param");
+                .param("runner1 param").build();
 
         scheduler.newWorker("runner2", new Runner())
-                .setParam("runner2 param");
+                .param("runner2 param").build();
 
         scheduler.newWorker("runner3", new Runner())
-                .setParam("runner3 param");
+                .param("runner3 param").build();
 
-        scheduler.resultTransfer("runner1", "runner2");
-        scheduler.resultTransfer("runner1", "runner3");
-        
-        Async.execute(scheduler);
+        // 将runner1的返回值传递到runner2进行处理
+        scheduler.must("runner1", "runner2");
+        scheduler.must("runner1", "runner3");
+        scheduler.run();
 
+        Map<String, AWorkerResult> results = scheduler.results();
     }
 }
 ```
-+ 多对一数据传递
++ ### 多对一数据传递
+通过must不仅可以将一个数据源绑定到其他多个worker，也可以将多个worker作为数据源绑定到其他worker
+
+以下代码展示了这样的场景：
+
+![alt 多对一数据传递](data:image/png;base64,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)
 ```java
 public class Param {
     
@@ -87,46 +161,228 @@ public class Param {
     public void manyToOne() {
         Scheduler scheduler = new Scheduler();
         scheduler.newWorker("runner1", new Runner())
-                .setParam("runner1 param");
+                .param("runner1 param").build();
 
         scheduler.newWorker("runner2", new Runner())
-                .setParam("runner2 param");
+                .param("runner2 param").build();
 
         scheduler.newWorker("runner3", new Runner())
-                .setParam("runner3 param");
+                .param("runner3 param").build();
 
-        scheduler.resultTransfer("runner1", "runner3");
-        scheduler.resultTransfer("runner2", "runner3");
-        Async.execute(scheduler);
+        scheduler.must("runner1", "runner3");
+        scheduler.must("runner2", "runner3");
+        scheduler.run();
+
+        Map<String, AWorkerResult> results = scheduler.results();
 
     }
 }
 ```
-+ 多对多数据传递
++ ### 多对多数据传递
+不要太局限，你可以在任意多个worker间传递数据
+
+以下代码的场景如图所示
+
+![alt 多对多数据传递](data:image/png;base64,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)
 ```java
 public class Param {
     @Test
     public void manyToMany() {
         Scheduler scheduler = new Scheduler();
         scheduler.newWorker("runner1", new Runner())
-                .setParam("runner1 param");
+                .param("runner1 param").build();
 
         scheduler.newWorker("runner2", new Runner())
-                .setParam("runner2 param");
+                .param("runner2 param").build();
 
         scheduler.newWorker("runner3", new Runner())
-                .setParam("runner3 param");
+                .param("runner3 param").build();
 
         scheduler.newWorker("runner4", new Runner())
-                .setParam("runner4 param");
+                .param("runner4 param").build();
 
-        scheduler.resultTransfer("runner1", "runner3");
-        scheduler.resultTransfer("runner2", "runner3");
-        scheduler.resultTransfer("runner1", "runner4");
-        scheduler.resultTransfer("runner2", "runner4");
+        scheduler.must("runner1", "runner3");
+        scheduler.must("runner2", "runner3");
+        scheduler.must("runner1", "runner4");
+        scheduler.must("runner2", "runner4");
+        scheduler.run();
+
+        Map<String, AWorkerResult> results = scheduler.results();
+        results.forEach((s, result) -> System.out.println(s + ": " +result.getResult()));
+
+    }
+}
+```
++ ### 复杂流程设计
+再复杂一点：
+![alt 复杂流程设计](data:image/png;base64,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)
+```java
+public class Multi {
+    @Test
+    public void multi() {
+        Scheduler scheduler = new Scheduler();
+        for (int i = 0; i < 7; i++) {
+            String name = "runner" + (i + 1);
+            scheduler.newWorker(name, new Runner()).param(name + " param").build();
+        }
+
+        scheduler.must("runner1", "runner2");
+        scheduler.must("runner1", "runner3");
+        scheduler.must("runner2", "runner3");
+        scheduler.must("runner3", "runner4");
+        scheduler.must("runner4", "runner5");
+        scheduler.must("runner6", "runner7");
+        scheduler.must("runner7", "runner5");
+        scheduler.run();
+
+        Map<String, AWorkerResult> results = scheduler.results();
+        results.forEach((s, result) -> System.out.println(s + ": " +result.getResult()));
+    }
+}
+```
+
++ ### 循环依赖任务预检及运行时检测
+工具提供了一些能力，来避免一些可能的错误，例如以下代码，是不能够正常执行的，因为数据从1到2到3，最后又流向了1
+
+如果确实有让1重复处理的需求，可以多实例化一个4，让其保持和1同样的功能，然后将3的数据流指向4即可
+```java
+public class check {
+    @Test
+    public void circleCheck() {
         
-        Async.execute(scheduler);
+        Scheduler scheduler = new Scheduler();
+        scheduler.newWorker("runner1", new Runner())
+                .param("runner1 param").build();
 
+        scheduler.newWorker("runner2", new Runner())
+                .param("runner2 param").build();
+
+        scheduler.newWorker("runner3", new Runner())
+                .param("runner3 param").build();
+
+        scheduler.must("runner1", "runner2");
+        scheduler.must("runner2", "runner3");
+        scheduler.must("runner3", "runner1");
+        // crack!
+        scheduler.run();
+        
+    }
+}
+```
+
++ ### 强依赖设置
+```java
+public class MustDependency {
+    @Test
+    public void mustTest() {
+
+        Scheduler scheduler = new Scheduler();
+        scheduler.newWorker("runner1", new Runner())
+                .param("runner1 param").build();
+
+        scheduler.newWorker("runner2", new Runner())
+                .param("runner2 param").build();
+
+        scheduler.newWorker("runner3", new Runner())
+                .param("runner3 param").build();
+
+        scheduler.must("runner1", "runner3");
+        scheduler.must("runner2", "runner3");
+        scheduler.run();
+
+        // blocking
+        scheduler.results();
+
+    }
+}
+```
+
++ ### 弱依赖设置
+除了must方法外，还可以使用need方法来实现和must相同的功能，唯一的不同是其在快速失败方面和must表现出不同的行为
+
+也就是说，must为数据流通提供了强依赖性，类似于allOf，而need为数据流通提供了弱依赖性，类似于anyOf
+```java
+public class NeedDependency {
+    @Test
+    public void needTest() {
+
+        Scheduler scheduler = new Scheduler();
+        scheduler.newWorker("runner1", new Runner())
+                .param("runner1 param").build();
+
+        scheduler.newWorker("runner2", new Runner())
+                .param("runner2 param").build();
+
+        scheduler.newWorker("runner3", new Runner())
+                .param("runner3 param").build();
+
+        scheduler.need("runner1", "runner3");
+        scheduler.need("runner2", "runner3");
+        scheduler.run();
+
+        // blocking
+        scheduler.results();
+
+    }
+}
+```
+
++ ### 快速失败
+1. #### 强依赖任务的快速失败
+
+执行以下代码，你会发现runner3的方法不会被调用，而控制台会告诉你相关的警告信息
+```java
+public class FastFail {
+    @Test
+    public void mustFastFailTest() {
+
+        System.out.println(System.currentTimeMillis());
+
+        Scheduler scheduler = new Scheduler();
+        scheduler.newWorker("runner1", new Runner())
+                .param("runner1 param").build();
+
+        scheduler.newWorker("runner2", new ErrorRunner())
+                .param("runner2 param").build();
+
+        scheduler.newWorker("runner3", new LongTimeRunner())
+                .param("runner3 param").build();
+
+        scheduler.must("runner1", "runner3");
+        scheduler.must("runner2", "runner3");
+        scheduler.run();
+
+        // blocking
+        Map<String, AWorkerResult> results = scheduler.results();
+
+        System.out.println(System.currentTimeMillis());
+
+    }
+}
+```
+
+2. #### 弱依赖任务的快速失败
+相较于强依赖任务的不可挽回，执行以下代码你会发现虽然控制台发出了警告，但是runner3依旧被执行了，这是因为runner1的正常执行
+```java
+public class FastFail {
+    @Test
+    public void needFastFailTest() {
+        Scheduler scheduler = new Scheduler();
+        scheduler.newWorker("runner1", new Runner())
+                .param("runner1 param").build();
+
+        scheduler.newWorker("runner2", new ErrorRunner())
+                .param("runner2 param").build();
+
+        scheduler.newWorker("runner3", new Runner())
+                .param("runner3 param").build();
+
+        scheduler.need("runner1", "runner3");
+        scheduler.need("runner2", "runner3");
+        scheduler.run();
+
+        // blocking
+        Map<String, AWorkerResult> results = scheduler.results();
     }
 }
 ```

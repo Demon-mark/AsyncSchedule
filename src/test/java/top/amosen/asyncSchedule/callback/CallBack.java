@@ -1,5 +1,9 @@
 package top.amosen.asyncSchedule.callback;
 
+import top.amosen.asyncSchedule.result.AWorkerResult;
+
+import java.util.Map;
+
 /**
  * @author Amosen
  * @Date 2023-03-16 15:37
@@ -34,6 +38,11 @@ public class CallBack implements ACallback<String, String>{
         if (null != throwable) {
             throwable.printStackTrace();
         }
+
+    }
+
+    @Override
+    public void onFail(Throwable throwable, Map<String, AWorkerResult> results) {
 
     }
 }

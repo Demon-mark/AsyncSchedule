@@ -14,6 +14,10 @@ import java.util.concurrent.FutureTask;
  */
 public interface AWorkerWrapper<P, R> {
 
+    void setName(String name);
+
+    String getName();
+
     /**
      * 设置执行回调
      * @param callback 执行回调
@@ -21,7 +25,7 @@ public interface AWorkerWrapper<P, R> {
     AWorkerWrapper<P, R> callback(ACallback<P, R> callback);
 
     @Nullable
-    ACallback<P, R> getCallback();
+    ACallback<P, R> callback();
 
     /**
      * 设置worker
@@ -31,15 +35,24 @@ public interface AWorkerWrapper<P, R> {
 
     /**
      * 执行worker
-     * @param results 所依赖的worker传递的结果
-     * @return
+     * @return 需要执行的任务
      */
-    FutureTask<AWorkerResult> execute(Map<String, AWorkerResult> results);
+    Runnable execute();
 
     /**
      * 设置参数，在worker调用时传递给对应的方法
      * @param param 需要传递的参数
      */
     AWorkerWrapper<P, R> setParam(P param);
+
+    void putResult(String name, AWorkerResult result);
+
+    Integer getQuoted();
+
+    void addQuoted();
+
+    void mustFail(Throwable throwable);
+
+    void needFail(Throwable throwable);
 
 }

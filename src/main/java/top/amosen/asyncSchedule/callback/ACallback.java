@@ -2,6 +2,10 @@ package top.amosen.asyncSchedule.callback;
 
 import com.sun.istack.internal.NotNull;
 import com.sun.istack.internal.Nullable;
+import top.amosen.asyncSchedule.result.AWorkerResult;
+import top.amosen.asyncSchedule.wrapper.AWorkerWrapper;
+
+import java.util.Map;
 
 /**
  * 异步任务执行回调
@@ -40,5 +44,12 @@ public interface ACallback<P, R> {
     void onComplete(@Nullable P param,
                     @Nullable R result,
                     @Nullable Throwable throwable);
+
+    /**
+     * 当任务呗快速失败时调用
+     * @param throwable 被快速失败的原因
+     * @param results 快速失败前的结果
+     */
+    void onFail(Throwable throwable, Map<String, AWorkerResult> results);
 
 }
