@@ -16,7 +16,7 @@ import java.util.Map;
 public class MustNeed {
 
     @Test
-    public void mustTest() {
+    public void mustTest() throws InterruptedException {
 
         Scheduler scheduler = new Scheduler();
         scheduler.newWorker("runner1", new Runner())
@@ -38,7 +38,7 @@ public class MustNeed {
     }
 
     @Test
-    public void mustFastFailTest() {
+    public void mustFastFailTest() throws InterruptedException {
 
         System.out.println(System.currentTimeMillis());
 
@@ -64,7 +64,7 @@ public class MustNeed {
     }
 
     @Test
-    public void needFastFailTest() {
+    public void needFastFailTest() throws InterruptedException {
         Scheduler scheduler = new Scheduler();
         scheduler.newWorker("runner1", new Runner())
                 .param("runner1 param").build();

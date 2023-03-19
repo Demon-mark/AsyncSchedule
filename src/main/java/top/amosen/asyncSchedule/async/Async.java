@@ -33,7 +33,11 @@ public class Async {
                     executorService.execute(run);
                 }
             }
-            scheduler.forAll();
+            try {
+                scheduler.forAll();
+            } catch (InterruptedException e) {
+                throw new RuntimeException(e);
+            }
         });
     }
 

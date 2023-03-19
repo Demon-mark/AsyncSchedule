@@ -9,10 +9,7 @@ import top.amosen.asyncSchedule.wrapper.AWorkerWrapper;
 import top.amosen.asyncSchedule.wrapper.impl.DefaultWorkerWrapper;
 
 import java.util.*;
-import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.*;
 import java.util.logging.Logger;
 
 /**
@@ -48,9 +45,11 @@ public class Scheduler implements Iterator {
     private static final String DEFAULT_NAME_PREFIX = "scheduler-";
 
     /**
-     * 记录全局已经注册的事件总线数量，用于省略指定scheduler名称
+     * 记录全局已经创建的Scheduler数量，用于省略指定scheduler名称
      */
     private static Integer taskNum = 0;
+
+    private CountDownLatch latch;
 
     public Scheduler() {
         this(DEFAULT_NAME_PREFIX + (++taskNum));
@@ -176,6 +175,8 @@ public class Scheduler implements Iterator {
         if (whiteSet.isEmpty() && (!must.isEmpty() || !need.isEmpty())) {
             throw new RuntimeException("circular transfer detected or a task's condition can not satisfy, please check");
         }
+        // 初始化CountdownLatch
+        latch = new CountDownLatch(registered.size());
     }
 
     private void init(AWorkerWrapper wrapper) {
@@ -192,8 +193,13 @@ public class Scheduler implements Iterator {
      * 获取最终所有异步任务的执行结果
      * @return
      */
-    public Map<String, AWorkerResult> results() {
+    public Map<String, AWorkerResult> results() throws InterruptedException {
         forAll();
+        return executed;
+    }
+
+    public Map<String, AWorkerResult> results(long timeout, TimeUnit unit) throws InterruptedException {
+        forAll(timeout, unit);
         return executed;
     }
 
@@ -237,6 +243,7 @@ public class Scheduler implements Iterator {
         AWorkerResult workerResult = packForResult(throwable, result);
         executing.remove(wrapper);
         addExecuted(wrapper.getName(), workerResult);
+        latch.countDown();
     }
 
     private <P, R> void continueGo(AWorkerWrapper<P, R> wrapper, Throwable throwable, R result) {
@@ -276,8 +283,30 @@ public class Scheduler implements Iterator {
         addExecuted(wrapper.getName(), packForResult(throwable, null));
     }
 
-    public void forAll() {
-        while(this.hasWrapper);
+    public void forAll() throws InterruptedException {
+        latch.await();
+    }
+
+    public void forAll(long timeout, TimeUnit unit) throws InterruptedException {
+        boolean finish = latch.await(timeout, unit);
+        if (!finish) {
+            // 超时，该组任务应当全部失败
+            logger.warning("scheduler " + name + " execute fail for timeout");
+            fastFailAll();
+        }
+    }
+
+    public void fastFailAll() {
+        // 先将waiting中的任务快速失败
+        for (AWorkerWrapper wrapper : waiting) {
+            fastFail(wrapper, new RuntimeException("fast fail for task timeout"));
+        }
+        // 快速失败executable中还未执行的任务
+        synchronized (executable) {
+            while (hasNext()) {
+                fastFail(next(), new RuntimeException("fast fail for task timeout"));
+            }
+        }
     }
 
 
