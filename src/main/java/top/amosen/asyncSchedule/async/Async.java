@@ -3,7 +3,6 @@ package top.amosen.asyncSchedule.async;
 import top.amosen.asyncSchedule.scheduler.Scheduler;
 import top.amosen.asyncSchedule.wrapper.AWorkerWrapper;
 
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadPoolExecutor;

@@ -1,13 +1,11 @@
 package top.amosen.asyncSchedule.param;
 
 import org.junit.Test;
-import top.amosen.asyncSchedule.async.Async;
 import top.amosen.asyncSchedule.result.AWorkerResult;
 import top.amosen.asyncSchedule.runner.Runner;
 import top.amosen.asyncSchedule.scheduler.Scheduler;
 
 import java.util.Map;
-import java.util.function.BiConsumer;
 
 /**
  * @author Amosen
@@ -16,7 +14,7 @@ import java.util.function.BiConsumer;
 public class Param {
 
     @Test
-    public void oneToMany() {
+    public void oneToMany() throws InterruptedException {
         Scheduler scheduler = new Scheduler();
         scheduler.newWorker("runner1", new Runner())
                 .param("runner1 param").build();
@@ -36,14 +34,14 @@ public class Param {
     }
 
     @Test
-    public void secure() {
+    public void secure() throws InterruptedException {
         for (int i = 0; i < 100; i++) {
             manyToOne();
         }
     }
 
     @Test
-    public void manyToOne() {
+    public void manyToOne() throws InterruptedException {
         Scheduler scheduler = new Scheduler();
         scheduler.newWorker("runner1", new Runner())
                 .param("runner1 param").build();
@@ -63,7 +61,7 @@ public class Param {
     }
 
     @Test
-    public void manyToMany() {
+    public void manyToMany() throws InterruptedException {
         Scheduler scheduler = new Scheduler();
         scheduler.newWorker("runner1", new Runner())
                 .param("runner1 param").build();
@@ -108,7 +106,7 @@ public class Param {
     }
 
     @Test
-    public void multi() {
+    public void multi() throws InterruptedException {
         Scheduler scheduler = new Scheduler();
         for (int i = 0; i < 7; i++) {
             String name = "runner" + (i + 1);

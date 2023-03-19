@@ -1,15 +1,12 @@
 package top.amosen.asyncSchedule.parallel;
 
 import org.junit.Test;
-import top.amosen.asyncSchedule.async.Async;
 import top.amosen.asyncSchedule.callback.DefaultCallbackAdapter;
 import top.amosen.asyncSchedule.result.AWorkerResult;
 import top.amosen.asyncSchedule.runner.Runner;
 import top.amosen.asyncSchedule.scheduler.Scheduler;
 
-import java.util.Iterator;
 import java.util.Map;
-import java.util.concurrent.ExecutionException;
 import java.util.function.BiConsumer;
 
 /**
@@ -19,7 +16,7 @@ import java.util.function.BiConsumer;
 public class parallel {
 
    @Test
-   public void parallel() {
+   public void parallel() throws InterruptedException {
 
       Scheduler scheduler = new Scheduler();
 

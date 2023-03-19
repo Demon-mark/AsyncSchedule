@@ -1,6 +1,5 @@
 package top.amosen.asyncSchedule.result;
 
-import com.sun.istack.internal.Nullable;
 import sun.misc.Unsafe;
 import top.amosen.asyncSchedule.exception.AResultConflictException;
 
@@ -17,7 +16,6 @@ public class AWorkerResult {
 
     private static final Object NONE_RESULT = new Object();
 
-    @Nullable
     private Object result;
 
     private Throwable throwable;

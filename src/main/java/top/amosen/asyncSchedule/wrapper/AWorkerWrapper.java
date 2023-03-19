@@ -1,12 +1,8 @@
 package top.amosen.asyncSchedule.wrapper;
 
-import com.sun.istack.internal.Nullable;
 import top.amosen.asyncSchedule.callback.ACallback;
 import top.amosen.asyncSchedule.result.AWorkerResult;
 import top.amosen.asyncSchedule.worker.AWorker;
-
-import java.util.Map;
-import java.util.concurrent.FutureTask;
 
 /**
  * @author Amosen
@@ -24,7 +20,7 @@ public interface AWorkerWrapper<P, R> {
      */
     AWorkerWrapper<P, R> callback(ACallback<P, R> callback);
 
-    @Nullable
+
     ACallback<P, R> callback();
 
     /**
