@@ -90,8 +90,10 @@ public class Scheduler implements Iterator {
 
     // when executing waiting -> executable
     private void removeWaiting(AWorkerWrapper wrapper) {
-        waiting.remove(wrapper);
-        executable.offer(wrapper);
+        boolean b = waiting.remove(wrapper);
+        if (b) {
+            executable.offer(wrapper);
+        }
     }
 
     public <P, R> AWorkerWrapperFacade<P, R> newWorker(AWorker<P, R> worker) {
@@ -238,8 +240,6 @@ public class Scheduler implements Iterator {
     }
 
     private <P, R> void continueGo(AWorkerWrapper<P, R> wrapper, Throwable throwable, R result) {
-
-
         // 在这里不考虑快速失败的任务跳过，原因：
         // 被快速失败的任务并不影响wrapper中的被依赖数，后续的任务只能有一种情况：
         //      任务在等待集合中

@@ -38,8 +38,6 @@ public class DefaultWorkerWrapper<P, R> implements AWorkerWrapper<P, R> {
 
     private AtomicBoolean hasSuccess = new AtomicBoolean(false);
 
-    private AtomicBoolean executed = new AtomicBoolean(false);
-
     private Throwable failCause = null;
 
     public DefaultWorkerWrapper() {
@@ -130,13 +128,12 @@ public class DefaultWorkerWrapper<P, R> implements AWorkerWrapper<P, R> {
     }
 
     @Override
-    public Runnable execute() {
+    public synchronized Runnable execute() {
         validate();
-        if (failed.get() || executed.get()) {
+        if (failed.get()) {
             callback.onFail(failCause, results);
             return null;
         }
-        boolean b = executed.getAndSet(true);
         return () -> {
 
             Throwable t = null;
